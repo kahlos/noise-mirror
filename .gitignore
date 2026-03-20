@@ -1,0 +1,28 @@
+# Project specific
+Deployment_v1/
+models/
+tests/output/
+
+# Logs
+*.log
+
+# Caches and Build
+.cache/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# OSX Meta
+.DS_Store
+.DS_Store?
+
+# Agent files
+.agent/

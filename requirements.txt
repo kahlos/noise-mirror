@@ -1,0 +1,10 @@
+diffusers
+transformers
+accelerate
+pillow
+requests
+hf_transfer
+numpy
+opencv-python
+torch
+huggingface-hub
