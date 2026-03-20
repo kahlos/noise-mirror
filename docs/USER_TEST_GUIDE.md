@@ -61,9 +61,8 @@ The display should show a 2x2 grid:
 
 ## 5. Performance Check
 - The application should run smoothly.
-- On Apple Silicon (M1/M2/M3), it should feel responsive (aiming for >10 FPS, ideally 30 if using Lightning models).
-- If it feels like a slideshow (<1 FPS), something is wrong with CoreML acceleration.
+- On Apple Silicon (M1/M2/M3), the webcam feed should be fluid (30 FPS), while the AI dream state will update at approximately 3 FPS due to deliberate thermal throttling.
 
 ## 6. Troubleshooting
 - **Black Screen**: Check camera permissions in System Settings -> Privacy & Security -> Camera.
-- **Crash on Start**: Ensure `vendor/streamdiffusion-mac` is properly installed and `models/` contains `unet_sdxs_512.mlpackage`.
+- **Crash on Start**: Ensure your virtual environment is activated and you have internet access on first launch to download the Hugging Face models into the `models/` directory.

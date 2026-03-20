@@ -3,6 +3,14 @@ Deployment_v1/
 models/
 tests/output/
 
+# Large Media and Model Files
+*.mp4
+*.mov
+*.safetensors
+*.ckpt
+*.pt
+test_output*.jpg
+
 # Logs
 *.log
 
