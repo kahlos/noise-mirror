@@ -11,7 +11,7 @@ from app.ai_engine import AIEngine
 class NoiseMirrorExhibit:
     def __init__(self):
         self.prompt_manager = PromptManager(rotation_interval=60.0)
-        self.ai_engine = AIEngine(models_dir=os.path.join(os.getcwd(), "models"))
+        self.ai_engine = AIEngine()
         self.running = False
         self.last_ai_result = None
 

@@ -13,8 +13,10 @@ def test_video_proxy():
     (test-video.mov) as the input source instead of the webcam.
     This validates that the fast loop and background AI loop work concurrently.
     """
-    video_path = os.path.join(os.path.dirname(__file__), "test-video.mov")
-    output_path = os.path.join(os.path.dirname(__file__), "test_output_video.mp4")
+    output_dir = os.path.join(os.path.dirname(__file__), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    video_path = os.path.join(output_dir, "test-video.mov")
+    output_path = os.path.join(output_dir, "test_output_video.mp4")
     
     assert os.path.exists(video_path), f"Test video not found: {video_path}"
     

@@ -1,5 +1,5 @@
 # Project specific
-Deployment_v1/
+deploy/
 models/
 tests/output/
 
@@ -22,11 +22,6 @@ __pycache__/
 
 # Virtual Environments
 .venv/
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
 
 # OSX Meta
 .DS_Store

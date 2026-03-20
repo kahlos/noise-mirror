@@ -1,45 +1,18 @@
-import os
 import cv2
 import time
 import queue
 import threading
-import torch
-import gc
+import base64
+import requests
 import numpy as np
-from PIL import Image
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, LCMScheduler
 from app.cv_engine import extract_noise
 
 class AIEngine:
-    def __init__(self, models_dir="models"):
-        self.models_dir = models_dir
+    def __init__(self, api_url="http://127.0.0.1:7860/sdapi/v1/img2img"):
+        self.api_url = api_url
         
-        # Load ControlNet
-        print("Loading ControlNet...")
-        self.controlnet = ControlNetModel.from_pretrained(
-            "lllyasviel/sd-controlnet-canny",
-            cache_dir=self.models_dir,
-            torch_dtype=torch.float16
-        )
-        
-        # Load base SD 1.5 pipeline but attach the ControlNet
-        print("Loading Stable Diffusion Pipeline...")
-        self.pipe = StableDiffusionControlNetPipeline.from_pretrained(
-            "runwayml/stable-diffusion-v1-5", 
-            controlnet=self.controlnet,
-            cache_dir=self.models_dir,
-            safety_checker=None,
-            torch_dtype=torch.float16
-        ).to("mps") # Native Apple Silicon GPU target
-        
-        # Silence MPSGraph cache permission spam by setting a local cache dir
-        os.makedirs(os.path.join(self.models_dir, ".mtl_cache"), exist_ok=True)
-        os.environ["MTL_SHADER_CACHE_DIR"] = os.path.join(self.models_dir, ".mtl_cache")
-        
-        # Inject LCM (Latent Consistency Model) for fast 4-step generation
-        self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
-        self.pipe.load_lora_weights("latent-consistency/lcm-lora-sdv1-5", weight_name="pytorch_lora_weights.safetensors", cache_dir=self.models_dir)
-
+        # Performance: Reuse TCP connections to API
+        self.session = requests.Session()
         
         # Thread communication
         self.frame_queue = queue.Queue(maxsize=1)
@@ -84,10 +57,9 @@ class AIEngine:
                 return None
 
     def _inference_loop(self):
-        print("AI Inference Slow Loop started.")
+        print("AI Inference Slow Loop (Draw Things API) started.")
         while self.running:
-            start_time = time.time()
-            
+            loop_start = time.time()
             try:
                 frame = self.frame_queue.get(timeout=1.0)
             except queue.Empty:
@@ -98,27 +70,50 @@ class AIEngine:
 
             current_prompt = self.prompt_manager.get_current_prompt()
             
-            # Pre-process (Canny Edge Detection for ControlNet)
-            frame_resized = cv2.resize(frame, (512, 512))
-            webcam_frame_gray = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2GRAY)
-            canny_edges = cv2.Canny(webcam_frame_gray, 100, 200)
+            # Pre-process: Resize and encode frame to Base64 for the API
+            frame_resized = cv2.resize(frame, (448, 448))
+            _, buffer = cv2.imencode('.png', frame_resized)
+            frame_b64 = base64.b64encode(buffer).decode('utf-8')
             
-            # ControlNet requires a 3-channel RGB image
-            canny_edges_rgb = cv2.cvtColor(canny_edges, cv2.COLOR_GRAY2RGB)
-            canny_edges_pil = Image.fromarray(canny_edges_rgb)
+            # Construct the payload for Draw Things (A1111 compatible)
+            payload = {
+                "init_images": [frame_b64],
+                "prompt": current_prompt,
+                "steps": 2,                # Adjust based on your Draw Things model
+                "width": 448,
+                "height": 448,
+                "denoising_strength": 0.5  # Ensure the image noise is blended
+            }
             
-            # Inference (LCM + ControlNet)
             try:
-                ai_image_pil = self.pipe(
-                    prompt=current_prompt,
-                    image=canny_edges_pil,          # ControlNet acts as the structural foundation
-                    num_inference_steps=4,          # LCM allows for 4-step blazing fast generation
-                    guidance_scale=1.5,             # LCM requires very low guidance scales
-                    controlnet_conditioning_scale=0.8
-                ).images[0]
+                # Send to Draw Things
+                response = self.session.post(self.api_url, json=payload, timeout=10.0)
+                response.raise_for_status()
+                response_data = response.json()
                 
-                # Convert PIL to CV2 BGR
-                ai_raw = cv2.cvtColor(np.array(ai_image_pil), cv2.COLOR_RGB2BGR)
+                # Extract the returned Base64 image
+                result_b64 = response_data['images'][0]
+                
+                # Draw Things / A1111 sometimes prepends a data URI scheme
+                if result_b64.startswith("data:image"):
+                    result_b64 = result_b64.split(",", 1)[1]
+                    
+                # Decode Base64 back to an OpenCV BGR frame
+                img_bytes = base64.b64decode(result_b64)
+                img_arr = np.frombuffer(img_bytes, dtype=np.uint8)
+                ai_raw = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+                
+                # Safety check in case decoding fails
+                if ai_raw is None:
+                    continue
+                    
+                # Resize from 448x448 back to 512x512 for main UI layout
+                ai_raw = cv2.resize(ai_raw, (512, 512))
+                
+                # Thermal cap: ensure we don't exceed 3 FPS (0.33s per frame)
+                elapsed = time.time() - loop_start
+                if elapsed < 0.333:
+                    time.sleep(0.333 - elapsed)
                 
                 # Post-process (extract noise from the AI generated frame)
                 ai_noise = extract_noise(ai_raw)
@@ -131,16 +126,8 @@ class AIEngine:
                         pass
                 self.result_queue.put((ai_raw, ai_noise))
                 
+            except requests.exceptions.RequestException as e:
+                print(f"API Connection Error (Is Draw Things running?): {e}")
+                time.sleep(2.0) # Back off to prevent console spam
             except Exception as e:
-                print(f"Inference error: {e}")
-            finally:
-                if torch.backends.mps.is_available():
-                    gc.collect()
-                    torch.mps.empty_cache()
-            
-            # Thermal Management
-            # Capping AI at strict 3 FPS (0.333s per cycle)
-            elapsed = time.time() - start_time
-            target_fps_time = 0.333
-            if elapsed < target_fps_time:
-                time.sleep(target_fps_time - elapsed)
+                print(f"Inference processing error: {e}")

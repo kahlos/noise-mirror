@@ -8,11 +8,13 @@ from app.layout import build_4_quadrant_grid
 
 def test_graphical_output():
     """
-    Loads tests/test-photo.jpg, processes it through the entire layout and real AI pipeline,
+    Loads tests/output/test-photo.jpg, processes it through the entire layout and real AI pipeline,
     and saves the resulting 1024x1024 output interface grid to output_grid.jpg.
     """
-    input_path = os.path.join(os.path.dirname(__file__), "test-photo.jpg")
-    output_path = os.path.join(os.path.dirname(__file__), "test_output_grid.jpg")
+    output_dir = os.path.join(os.path.dirname(__file__), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    input_path = os.path.join(output_dir, "test-photo.jpg")
+    output_path = os.path.join(output_dir, "test_output_grid.jpg")
     
     assert os.path.exists(input_path), f"Test photo not found: {input_path}"
     
